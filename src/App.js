@@ -54,8 +54,65 @@ const bigQueryService = {
   }
 };
 
+// --- Mock Data for Mandatory Selections ---
+const MOCK_TIME_PERIODS = ['This Quarter', 'Last Quarter', 'This Year', 'Last Year'];
+const MOCK_ATTRIBUTION_MODELS = ['First Touch', 'Last Touch', 'AI Model'];
+const MOCK_AUDIENCES = ['ICP', 'Customers', 'Current Pipeline'];
+
 
 // --- React Components ---
+
+const MandatorySelections = ({ type, selections, setSelections }) => {
+    const showAttribution = ['spend_performance', 'session_activity_performance'].includes(type);
+    const showAudience = type === 'audience_engagement';
+
+    if (!type) return null;
+
+    return (
+        <section className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">2. Mandatory Selections</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Period</label>
+                    <select
+                        value={selections.timePeriod}
+                        onChange={(e) => setSelections(prev => ({ ...prev, timePeriod: e.target.value }))}
+                        className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                    >
+                        {MOCK_TIME_PERIODS.map(period => <option key={period} value={period}>{period}</option>)}
+                    </select>
+                </div>
+
+                {showAttribution && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Attribution Model</label>
+                        <select
+                            value={selections.attributionModel}
+                            onChange={(e) => setSelections(prev => ({ ...prev, attributionModel: e.target.value }))}
+                            className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                        >
+                            {MOCK_ATTRIBUTION_MODELS.map(model => <option key={model} value={model}>{model}</option>)}
+                        </select>
+                    </div>
+                )}
+
+                {showAudience && (
+                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+                        <select
+                            value={selections.audience}
+                            onChange={(e) => setSelections(prev => ({ ...prev, audience: e.target.value }))}
+                            className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                        >
+                            {MOCK_AUDIENCES.map(audience => <option key={audience} value={audience}>{audience}</option>)}
+                        </select>
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+};
+
 
 const FilterValueInput = ({ activeFilter, onUpdate }) => {
   const [options, setOptions] = useState([]);
@@ -179,9 +236,8 @@ const SelectionPanel = ({ items, onSelectItem, onClose, isOpen, mode, selectedIt
   );
 };
 
-// --- NEW: Component to display the JSON configuration ---
 const ReportConfigCanvas = ({ config }) => {
-  const jsonString = JSON.stringify(config, null, 2); // Pretty print with 2 spaces
+  const jsonString = JSON.stringify(config, null, 2); 
 
   return (
     <div className="bg-gray-800 p-6 rounded-lg shadow-md h-full flex flex-col">
@@ -203,6 +259,13 @@ export default function App() {
   const [selectedAnalysisType, setSelectedAnalysisType] = useState(null);
   const [isLoadingTypes, setIsLoadingTypes] = useState(true);
 
+  const defaultMandatorySelections = {
+      timePeriod: 'This Quarter',
+      attributionModel: 'AI Model',
+      audience: 'ICP',
+  };
+
+  const [mandatorySelections, setMandatorySelections] = useState(defaultMandatorySelections);
   const [availableFilters, setAvailableFilters] = useState([]);
   const [isLoadingFilters, setIsLoadingFilters] = useState(false);
   const [activeFilters, setActiveFilters] = useState([]);
@@ -229,13 +292,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Whenever the selected analysis type changes, we should reset the configuration.
     setActiveFilters([]);
     setSelectedSegmentation(null);
     setSelectedMetrics([]);
+    setMandatorySelections(defaultMandatorySelections);
 
     if (!selectedAnalysisType) {
-      // If no type is selected, clear the available options as well and stop.
       setAvailableFilters([]);
       setAvailableSegmentations([]);
       setAvailableMetrics([]);
@@ -261,13 +323,23 @@ export default function App() {
     fetchDataForType();
   }, [selectedAnalysisType]);
 
-  // --- NEW: Memoized hook to build the final report configuration object ---
   const reportConfig = useMemo(() => {
     if (!selectedAnalysisType) {
         return { message: "Select an analysis type to begin building your report." };
     }
+    
+    const mandatory = {};
+    mandatory.timePeriod = mandatorySelections.timePeriod;
+    if (['spend_performance', 'session_activity_performance'].includes(selectedAnalysisType)) {
+        mandatory.attributionModel = mandatorySelections.attributionModel;
+    }
+    if (selectedAnalysisType === 'audience_engagement') {
+        mandatory.audience = mandatorySelections.audience;
+    }
+
     return {
         analysisType: selectedAnalysisType,
+        mandatorySelections: mandatory,
         filters: activeFilters.map(f => ({
             propertyId: f.property_id,
             propertyLabel: f.property_label,
@@ -283,7 +355,7 @@ export default function App() {
             metricLabel: m.metric_label,
         })),
     };
-  }, [selectedAnalysisType, activeFilters, selectedSegmentation, selectedMetrics]);
+  }, [selectedAnalysisType, activeFilters, selectedSegmentation, selectedMetrics, mandatorySelections]);
 
 
   const handleAddFilter = (filterToAdd) => {
@@ -326,7 +398,6 @@ export default function App() {
     <div className="min-h-screen bg-gray-100 font-sans">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-7xl mx-auto p-4 sm:p-8">
 
-        {/* --- Left Column: Builder --- */}
         <div className="lg:col-span-1">
             <header className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Report Builder Demo</h1>
@@ -345,8 +416,10 @@ export default function App() {
                 
                 {selectedAnalysisType && (
                   <>
+                    <MandatorySelections type={selectedAnalysisType} selections={mandatorySelections} setSelections={setMandatorySelections} />
+                    
                     <section className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
-                        <h2 className="text-lg font-semibold text-gray-800 mb-4">2. Build Your Filter</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 mb-4">3. Build Your Filter</h2>
                         {isLoadingFilters ? <p>Loading filters...</p> : (
                             <>
                                 <div className="space-y-2 mb-4">
@@ -360,7 +433,7 @@ export default function App() {
                     </section>
 
                     <section className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
-                        <h2 className="text-lg font-semibold text-gray-800 mb-4">3. Select Segmentation</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 mb-4">4. Select Segmentation</h2>
                         {isLoadingSegmentations ? <p>Loading segmentations...</p> : (
                           <>
                             {selectedSegmentation ? (
@@ -376,7 +449,7 @@ export default function App() {
                     </section>
 
                     <section className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
-                        <h2 className="text-lg font-semibold text-gray-800 mb-4">4. Select Metrics</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 mb-4">5. Select Metrics</h2>
                         {isLoadingMetrics ? <p>Loading metrics...</p> : (
                           <>
                             <div className="space-y-2 mb-4">
@@ -404,7 +477,6 @@ export default function App() {
             </main>
         </div>
 
-        {/* --- Right Column: Canvas --- */}
         <div className="lg:col-span-1 lg:sticky top-8 h-fit lg:h-[calc(100vh-4rem)]">
           <ReportConfigCanvas config={reportConfig} />
         </div>
