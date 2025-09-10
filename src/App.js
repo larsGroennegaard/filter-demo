@@ -1,113 +1,171 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
-// --- Mock Data Service ---
-// This simulates the data we would get from BigQuery.
-const mockData = {
-  analysis_types: ['journeys', 'performance', 'attribution', 'revenue'],
-  filters: {
-    journeys: [
-      { property_id: '1', property_label: 'Source', property_scope_label: 'UTM' },
-      { property_id: '2', property_label: 'Medium', property_scope_label: 'UTM' },
-      { property_id: '3', property_label: 'Campaign', property_scope_label: 'UTM' },
-      { property_id: '4', property_label: 'Contact ID', property_scope_label: 'Identification' },
-      { property_id: '5', property_label: 'Company Name', property_scope_label: 'Company' },
-      { property_id: '6', property_label: 'Industry', property_scope_label: 'Company' },
-    ],
-    performance: [
-      { property_id: '7', property_label: 'Country', property_scope_label: 'Location' },
-      { property_id: '8', property_label: 'City', property_scope_label: 'Location' },
-      { property_id: '9', property_label: 'Device Type', property_scope_label: 'Technology' },
-      { property_id: '10', property_label: 'Browser', property_scope_label: 'Technology' },
-      { property_id: '5', property_label: 'Company Name', property_scope_label: 'Company' },
-    ],
-    attribution: [
-       { property_id: '1', property_label: 'Source', property_scope_label: 'UTM' },
-       { property_id: '2', property_label: 'Medium', property_scope_label: 'UTM' },
-       { property_id: '11', property_label: 'Landing Page', property_scope_label: 'On-site Behavior' },
-       { property_id: '12', property_label: 'Form Submissions', property_scope_label: 'On-site Behavior' },
-    ],
-     revenue: [
-       { property_id: '13', property_label: 'Deal Stage', property_scope_label: 'Sales' },
-       { property_id: '14', property_label: 'Deal Amount', property_scope_label: 'Sales' },
-       { property_id: '6', property_label: 'Industry', property_scope_label: 'Company' },
-    ],
-  }
-};
-
-const mockBigQueryService = {
+// --- BigQuery Service (Updated) ---
+const bigQueryService = {
   getAnalysisTypes: async () => {
-    console.log("Fetching analysis types...");
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return mockData.analysis_types;
+    try {
+      const response = await fetch('/api/query?queryName=getAnalysisTypes');
+      if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Failed to fetch analysis types:", error);
+      return [];
+    }
   },
   getFiltersForType: async (analysisType) => {
-    console.log(`Fetching filters for: ${analysisType}`);
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return mockData.filters[analysisType] || [];
+    try {
+      const response = await fetch(`/api/query?queryName=getFiltersForType&analysisType=${analysisType}`);
+      if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+       console.error(`Failed to fetch filters for ${analysisType}:`, error);
+       return [];
+    }
+  },
+  getPropertyValues: async (propertyId) => {
+    try {
+      const response = await fetch(`/api/query?queryName=getPropertyValues&propertyId=${propertyId}`);
+      if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+      return await response.json();
+    } catch (error) {
+       console.error(`Failed to fetch values for ${propertyId}:`, error);
+       return [];
+    }
   }
 };
 
 
-// --- React Components ---
+// --- New & Refactored React Components ---
 
-const FilterDisplay = ({ selectedAnalysisType }) => {
-  const [filters, setFilters] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
+const FilterValueInput = ({ activeFilter, onUpdate }) => {
+  const [options, setOptions] = useState([]);
+  const [isLoading, setIsLoading] = useState(true); // Start in loading state
 
   useEffect(() => {
-    if (!selectedAnalysisType) {
-        setFilters({});
-        return;
-    };
-
-    const fetchFilters = async () => {
+    // Always try to fetch a list of values for the given property.
+    const fetchOptions = async () => {
       setIsLoading(true);
-      const fetchedFilters = await mockBigQueryService.getFiltersForType(selectedAnalysisType);
-      
-      const grouped = fetchedFilters.reduce((acc, filter) => {
-        const scope = filter.property_scope_label;
-        if (!acc[scope]) {
-          acc[scope] = [];
-        }
-        acc[scope].push(filter);
-        return acc;
-      }, {});
-
-      setFilters(grouped);
+      const fetchedOptions = await bigQueryService.getPropertyValues(activeFilter.property_id);
+      setOptions(fetchedOptions || []); // Ensure options is always an array
       setIsLoading(false);
     };
+    fetchOptions();
+  }, [activeFilter.property_id]); // Re-run whenever the property ID changes
 
-    fetchFilters();
-  }, [selectedAnalysisType]);
-
-  if (!selectedAnalysisType) {
-    return null;
+  if (isLoading) {
+    return <select className="p-1 border border-gray-300 rounded-md text-sm flex-grow bg-gray-100" disabled><option>Loading values...</option></select>;
   }
 
+  // If the API returned a list of options, render a dropdown.
+  if (options.length > 0) {
+    return (
+      <select
+        className="p-1 border border-gray-300 rounded-md text-sm flex-grow"
+        value={activeFilter.value}
+        onChange={(e) => onUpdate(activeFilter.id, { ...activeFilter, value: e.target.value })}
+      >
+        <option value="">Select a value</option>
+        {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+      </select>
+    );
+  }
+  
+  // Otherwise, if no options were found, fall back to a text input.
   return (
-    <div className="mt-8 bg-white p-6 rounded-lg shadow-md">
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">Available Filters</h2>
-      {isLoading ? (
-        <div className="text-gray-500">Loading filters...</div>
-      ) : Object.keys(filters).length > 0 ? (
-        <div className="space-y-6">
-          {Object.entries(filters).map(([scope, filterList]) => (
-            <div key={scope}>
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">{scope}</h3>
-              <ul className="space-y-2">
-                {filterList.map(filter => (
-                  <li key={filter.property_id} className="p-2 bg-white rounded-md shadow-sm border border-gray-200 text-gray-700 cursor-pointer hover:bg-gray-100">
-                    {filter.property_label}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="text-gray-500 text-center mt-8">No filters available for this analysis type.</div>
-      )}
+    <input
+      type="text"
+      className="p-1 border border-gray-300 rounded-md text-sm flex-grow"
+      value={activeFilter.value}
+      onChange={(e) => onUpdate(activeFilter.id, { ...activeFilter, value: e.target.value })}
+      placeholder="Enter value..."
+    />
+  );
+};
+
+
+// Component for a single, configured filter in the main panel
+const ActiveFilterRow = ({ activeFilter, onRemove, onUpdate }) => {
+  // Use the operators from the filter definition instead of a mock list
+  const operators = activeFilter.available_operators || ['is equal to']; // Fallback for safety
+
+  return (
+    <div className="flex items-center gap-2 p-3 bg-white rounded-lg shadow-sm border border-gray-200 animate-fade-in">
+      <span className="font-medium text-gray-700">{activeFilter.property_label}</span>
+      <select 
+        className="p-1 border border-gray-300 rounded-md text-sm"
+        value={activeFilter.operator}
+        onChange={(e) => onUpdate(activeFilter.id, { ...activeFilter, operator: e.target.value })}
+      >
+        {operators.map(op => <option key={op} value={op}>{op}</option>)}
+      </select>
+      
+      <FilterValueInput activeFilter={activeFilter} onUpdate={onUpdate} />
+
+      <button onClick={() => onRemove(activeFilter.id)} className="text-gray-400 hover:text-red-600 p-1">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+        </svg>
+      </button>
     </div>
+  );
+};
+
+// Component for the slide-out panel to select new filters
+const FilterSelectorPanel = ({ availableFilters, onAddFilter, onClose, isOpen }) => {
+    const groupedFilters = useMemo(() => {
+        // Group available filters by their scope label
+        return availableFilters.reduce((acc, filter) => {
+            const scope = filter.property_scope_label || 'General'; // Use a fallback scope
+            if (!acc[scope]) acc[scope] = [];
+            acc[scope].push(filter);
+            return acc;
+        }, {});
+    }, [availableFilters]);
+
+  return (
+    <>
+      {/* Overlay */}
+      <div 
+        className={`fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      ></div>
+      {/* Panel */}
+      <div className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        <div className="flex flex-col h-full">
+            <header className="flex items-center justify-between p-4 border-b">
+                <h2 className="text-xl font-semibold text-gray-800">Add filter</h2>
+                <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </header>
+            
+            <div className="flex-grow overflow-y-auto p-4 space-y-4">
+                {Object.keys(groupedFilters).length > 0 ? (
+                    Object.entries(groupedFilters).map(([scope, filters]) => (
+                        <div key={scope}>
+                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">{scope}</h3>
+                            <ul className="space-y-1">
+                                {filters.map(filter => (
+                                    <li 
+                                        key={filter.property_id} 
+                                        className="p-2 text-gray-700 rounded-md cursor-pointer hover:bg-blue-100"
+                                        onClick={() => onAddFilter(filter)}
+                                    >
+                                        {filter.property_label}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-gray-500 text-center p-4">No available filters for this analysis type.</p>
+                )}
+            </div>
+        </div>
+      </div>
+    </>
   );
 };
 
@@ -115,30 +173,72 @@ const FilterDisplay = ({ selectedAnalysisType }) => {
 export default function App() {
   const [analysisTypes, setAnalysisTypes] = useState([]);
   const [selectedAnalysisType, setSelectedAnalysisType] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(true);
 
+  const [availableFilters, setAvailableFilters] = useState([]);
+  const [isLoadingFilters, setIsLoadingFilters] = useState(false);
+  
+  const [activeFilters, setActiveFilters] = useState([]);
+  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+
+  // Fetch analysis types on initial load
   useEffect(() => {
     const fetchTypes = async () => {
-      setIsLoading(true);
-      const types = await mockBigQueryService.getAnalysisTypes();
+      setIsLoadingTypes(true);
+      const types = await bigQueryService.getAnalysisTypes();
       setAnalysisTypes(types);
-      setIsLoading(false);
+      setIsLoadingTypes(false);
     };
     fetchTypes();
   }, []);
+
+  // Fetch available filters when the analysis type changes
+  useEffect(() => {
+    if (!selectedAnalysisType) {
+      setAvailableFilters([]);
+      setActiveFilters([]); // Clear active filters when type changes
+      return;
+    }
+    const fetchFilters = async () => {
+      setIsLoadingFilters(true);
+      const filters = await bigQueryService.getFiltersForType(selectedAnalysisType);
+      setAvailableFilters(filters);
+      setIsLoadingFilters(false);
+    };
+    fetchFilters();
+  }, [selectedAnalysisType]);
+
+  const handleAddFilter = (filterToAdd) => {
+    const newFilter = {
+      ...filterToAdd,
+      id: crypto.randomUUID(), // Unique ID for this specific instance of the filter
+      operator: filterToAdd.available_operators?.[0] || 'is equal to', // Default to the first available operator
+      value: '' // Default empty value
+    };
+    setActiveFilters(prev => [...prev, newFilter]);
+    setIsSelectorOpen(false); // Close the panel after adding a filter
+  };
+
+  const handleRemoveFilter = (filterId) => {
+    setActiveFilters(prev => prev.filter(f => f.id !== filterId));
+  };
+  
+  const handleUpdateFilter = (filterId, updatedFilter) => {
+    setActiveFilters(prev => prev.map(f => f.id === filterId ? updatedFilter : f));
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans">
       <div className="max-w-4xl mx-auto p-4 sm:p-8">
         <header className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Report Filter Demo</h1>
-            <p className="text-gray-600 mt-1">Select an analysis type to see available filters.</p>
+            <p className="text-gray-600 mt-1">Select an analysis type to build your filter query.</p>
         </header>
         
-        <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">Choose Analysis Type</h2>
-            {isLoading ? (
-                <div>Loading analysis types...</div>
+        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">1. Choose Analysis Type</h2>
+            {isLoadingTypes ? (
+                <div>Loading...</div>
             ) : (
                 <div className="flex flex-wrap gap-3">
                     {analysisTypes.map(type => (
@@ -158,8 +258,44 @@ export default function App() {
             )}
         </div>
         
-        <FilterDisplay selectedAnalysisType={selectedAnalysisType} />
+        {selectedAnalysisType && (
+             <div className="bg-white p-6 rounded-lg shadow-md animate-fade-in">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">2. Build Your Filter</h2>
+                 {isLoadingFilters ? <p>Loading filters...</p> : (
+                    <>
+                        <div className="space-y-2 mb-4">
+                            {activeFilters.length > 0 ? (
+                                activeFilters.map(filter => (
+                                    <ActiveFilterRow 
+                                        key={filter.id} 
+                                        activeFilter={filter}
+                                        onRemove={handleRemoveFilter}
+                                        onUpdate={handleUpdateFilter}
+                                    />
+                                ))
+                            ) : (
+                                <p className="text-gray-500 text-center p-4 border-2 border-dashed rounded-lg">No filters applied yet.</p>
+                            )}
+                        </div>
+                        <button 
+                            onClick={() => setIsSelectorOpen(true)}
+                            className="w-full text-blue-600 font-semibold border-2 border-dashed border-gray-300 rounded-lg p-3 hover:bg-blue-50 hover:border-blue-500 transition-all"
+                        >
+                            + Add filter
+                        </button>
+                    </>
+                 )}
+            </div>
+        )}
       </div>
+
+      <FilterSelectorPanel 
+        isOpen={isSelectorOpen}
+        onClose={() => setIsSelectorOpen(false)}
+        availableFilters={availableFilters}
+        onAddFilter={handleAddFilter}
+      />
     </div>
   );
 }
+
