@@ -91,6 +91,31 @@ module.exports = async (req, res) => {
         };
         break;
 
+      case 'getSegmentationsForType':
+        if (!analysisType) {
+          return res.status(400).json({ error: 'Missing required parameter for getSegmentationsForType: analysisType' });
+        }
+        query = `SELECT DISTINCT a.property_scope, a.property_label, a.property_id, a.property_data_type, a.available_operators 
+                 FROM ${BQ_TABLE}, UNNEST(available_segmentation_properties) AS a 
+                 WHERE analysis_type = @analysisType`;
+        options = {
+          query: query,
+          params: { analysisType: analysisType },
+        };
+        break;
+
+      case 'getMetricsForType':
+        if (!analysisType) {
+            return res.status(400).json({ error: 'Missing required parameter for getMetricsForType: analysisType' });
+        }
+        query = `SELECT DISTINCT a.* FROM ${BQ_TABLE}, UNNEST(available_metrics) AS a 
+                 WHERE analysis_type = @analysisType`;
+        options = {
+            query: query,
+            params: { analysisType: analysisType },
+        };
+        break;
+
       default:
         return res.status(400).json({ error: 'Invalid queryName specified.' });
     }
@@ -115,4 +140,3 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: 'Failed to query BigQuery.', details: error.message });
   }
 }
-
