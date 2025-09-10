@@ -229,15 +229,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Whenever the selected analysis type changes, we should reset the configuration.
+    setActiveFilters([]);
+    setSelectedSegmentation(null);
+    setSelectedMetrics([]);
+
     if (!selectedAnalysisType) {
+      // If no type is selected, clear the available options as well and stop.
       setAvailableFilters([]);
-      setActiveFilters([]);
       setAvailableSegmentations([]);
-      setSelectedSegmentation(null);
       setAvailableMetrics([]);
-      setSelectedMetrics([]);
       return;
     }
+    
     const fetchDataForType = async () => {
       setIsLoadingFilters(true);
       setIsLoadingSegmentations(true);
