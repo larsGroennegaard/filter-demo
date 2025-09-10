@@ -3,10 +3,28 @@
 
 const { BigQuery } = require('@google-cloud/bigquery');
 
-// Initialize BigQuery client
-// When deployed, this will automatically use the credentials 
-// from the Vercel environment variables you will set up.
-const bigquery = new BigQuery();
+// --- NEW: Explicit Credential Handling ---
+// This function initializes the BigQuery client.
+// It first tries to use the JSON string from the Vercel environment variable.
+// If that's not available (like in local development), it falls back to
+// the default behavior (which uses your local .env file).
+const initializeBigQuery = () => {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+    try {
+      const credentials = JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      return new BigQuery({ credentials });
+    } catch (e) {
+      console.error("Failed to parse GOOGLE_APPLICATION_CREDENTIALS_JSON:", e);
+      // Fallback to default auth if parsing fails
+      return new BigQuery();
+    }
+  } else {
+    // This will be used for your local `vercel dev` environment
+    return new BigQuery();
+  }
+};
+
+const bigquery = initializeBigQuery();
 
 // Define the full BigQuery table names to avoid repetition.
 const BQ_TABLE = '`product-471619.report_components.dreamdata_io`';
