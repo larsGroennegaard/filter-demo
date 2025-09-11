@@ -139,7 +139,7 @@ const FilterValueInput = ({ activeFilter, onUpdate }) => {
         value={activeFilter.value}
         onChange={(e) => onUpdate(activeFilter.id, { ...activeFilter, value: e.target.value })}
       >
-        <option value="">Select a value</option>
+        <option value="">Select value</option>
         {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
       </select>
     );
