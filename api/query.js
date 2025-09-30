@@ -27,7 +27,7 @@ const initializeBigQuery = () => {
 const bigquery = initializeBigQuery();
 
 // Define the full BigQuery table names to avoid repetition.
-const BQ_TABLE = '`product-471619.report_components.dreamdata_io`';
+const BQ_TABLE = '`product-471619.report_components.dreamdata_io2`';
 const BQ_VALUES_TABLE = '`product-471619.property_values_lookup.dreamdata_io`';
 
 
@@ -49,7 +49,7 @@ module.exports = async (req, res) => {
     
   // We will get the name of the query we want to run from the URL.
   // e.g., /api/query?queryName=getAnalysisTypes
-  const { queryName, analysisType, propertyId } = req.query;
+  const { queryName, analysisType, propertyId, metricId } = req.query;
 
   if (!queryName) {
     return res.status(400).json({ error: 'Missing required parameter: queryName' });
@@ -108,11 +108,34 @@ module.exports = async (req, res) => {
         if (!analysisType) {
             return res.status(400).json({ error: 'Missing required parameter for getMetricsForType: analysisType' });
         }
-        query = `SELECT DISTINCT a.* FROM ${BQ_TABLE}, UNNEST(available_metrics) AS a 
-                 WHERE analysis_type = @analysisType`;
+        query = `SELECT
+                    a.*,
+                    IFNULL(ARRAY_LENGTH(a.available_filter_properties), 0) > 0 AS has_filters
+                FROM
+                    ${BQ_TABLE},
+                    UNNEST(available_metrics) AS a
+                WHERE
+                    analysis_type = @analysisType`;
         options = {
             query: query,
             params: { analysisType: analysisType },
+        };
+        break;
+
+      case 'getFiltersForMetric':
+        if (!metricId) {
+          return res.status(400).json({ error: 'Missing required parameter for getFiltersForMetric: metricId' });
+        }
+        query = `SELECT f.*
+                 FROM
+                    ${BQ_TABLE},
+                    UNNEST(available_metrics) AS m,
+                    UNNEST(m.available_filter_properties) AS f
+                 WHERE
+                    m.metric_id = @metricId`;
+        options = {
+          query: query,
+          params: { metricId: metricId },
         };
         break;
 
