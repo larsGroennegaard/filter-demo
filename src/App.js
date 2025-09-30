@@ -54,7 +54,7 @@ const bigQueryService = {
   }
 };
 
-// --- Mock Data for Mandatory Selections ---
+// --- Mock Data for Mandatory Selections (Unchanged) ---
 const MOCK_TIME_PERIODS = ['This Quarter', 'Last Quarter', 'This Year', 'Last Year'];
 const MOCK_ATTRIBUTION_MODELS = ['First Touch', 'Last Touch', 'AI Model'];
 const MOCK_AUDIENCES = ['ICP', 'Customers', 'Current Pipeline'];
@@ -180,6 +180,8 @@ const ActiveFilterRow = ({ activeFilter, onRemove, onUpdate }) => {
 };
 
 const SelectionPanel = ({ items, onSelectItem, onClose, isOpen, mode, selectedItems = [] }) => {
+    const [collapsedSections, setCollapsedSections] = useState({});
+
     const groupedItems = useMemo(() => {
         const key = mode === 'metrics' ? 'metric_group_label' : 'property_scope_label';
         return items.reduce((acc, item) => {
@@ -190,50 +192,86 @@ const SelectionPanel = ({ items, onSelectItem, onClose, isOpen, mode, selectedIt
         }, {});
     }, [items, mode]);
 
-  const title = mode === 'filters' ? 'Add filter' : (mode === 'segmentations' ? 'Select segmentation' : 'Select metrics');
-  const idKey = mode === 'metrics' ? 'metric_id' : 'property_id';
-  const labelKey = mode === 'metrics' ? 'metric_label' : 'property_label';
+    useEffect(() => {
+        if (isOpen) {
+            setCollapsedSections({});
+        }
+    }, [isOpen, items]);
 
-  return (
-    <>
-      <div className={`fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}></div>
-      <div className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="flex flex-col h-full">
-            <header className="flex items-center justify-between p-4 border-b">
-                <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
-                <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
-            </header>
-            
-            <div className="flex-grow overflow-y-auto p-4 space-y-4">
-                {Object.keys(groupedItems).length > 0 ? (
-                    Object.entries(groupedItems).map(([scope, scopeItems]) => (
-                        <div key={scope}>
-                            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">{scope}</h3>
-                            <ul className="space-y-1">
-                                {scopeItems.map(item => {
-                                    const isSelected = selectedItems.some(selected => selected[idKey] === item[idKey]);
-                                    return (
-                                        <li 
-                                          key={item[idKey]} 
-                                          className={`flex items-center justify-between p-2 text-gray-700 rounded-md cursor-pointer transition-colors ${isSelected ? 'bg-blue-200' : 'hover:bg-blue-100'}`} 
-                                          onClick={() => onSelectItem(item)}
+    const toggleSection = (scope) => {
+        setCollapsedSections(prev => ({
+            ...prev,
+            [scope]: !prev[scope]
+        }));
+    };
+
+    const title = mode === 'filters' ? 'Add filter' : (mode === 'segmentations' ? 'Select segmentation' : 'Select metrics');
+    const idKey = mode === 'metrics' ? 'metric_id' : 'property_id';
+    const labelKey = mode === 'metrics' ? 'metric_label' : 'property_label';
+
+    const ChevronIcon = ({ isCollapsed }) => (
+        <svg
+            className={`w-5 h-5 text-gray-400 transform transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+    );
+
+    return (
+        <>
+            <div className={`fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}></div>
+            <div className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                <div className="flex flex-col h-full">
+                    <header className="flex items-center justify-between p-4 border-b">
+                        <h2 className="text-xl font-semibold text-gray-800">{title}</h2>
+                        <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                    </header>
+                    
+                    <div className="flex-grow overflow-y-auto p-4">
+                        {Object.keys(groupedItems).length > 0 ? (
+                            Object.entries(groupedItems).map(([scope, scopeItems]) => {
+                                const isCollapsed = collapsedSections[scope];
+                                return (
+                                    <div key={scope} className="py-2">
+                                        <h3 
+                                            className="flex items-center justify-between text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2 cursor-pointer select-none hover:text-gray-800"
+                                            onClick={() => toggleSection(scope)}
                                         >
-                                            {item[labelKey]}
-                                            {isSelected && mode === 'metrics' && <span className="text-blue-600">&#10003;</span>}
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        </div>
-                    ))
-                ) : (
-                    <p className="text-gray-500 text-center p-4">No available options for this analysis type.</p>
-                )}
+                                            <span>{scope}</span>
+                                            <ChevronIcon isCollapsed={isCollapsed} />
+                                        </h3>
+                                        {!isCollapsed && (
+                                            <ul className="space-y-1 mt-2 border-l-2 border-gray-200 pl-4">
+                                                {scopeItems.map(item => {
+                                                    const isSelected = selectedItems.some(selected => selected[idKey] === item[idKey]);
+                                                    return (
+                                                        <li 
+                                                          key={item[idKey]} 
+                                                          className={`flex items-center justify-between p-2 text-gray-700 rounded-md cursor-pointer transition-colors ${isSelected ? 'bg-blue-200' : 'hover:bg-blue-100'}`} 
+                                                          onClick={() => onSelectItem(item)}
+                                                        >
+                                                            {item[labelKey]}
+                                                            {isSelected && mode === 'metrics' && <span className="text-blue-600">&#10003;</span>}
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
+                                        )}
+                                    </div>
+                                );
+                            })
+                        ) : (
+                            <p className="text-gray-500 text-center p-4">No available options for this analysis type.</p>
+                        )}
+                    </div>
+                </div>
             </div>
-        </div>
-      </div>
-    </>
-  );
+        </>
+    );
 };
 
 const ReportConfigCanvas = ({ config }) => {
@@ -494,4 +532,3 @@ export default function App() {
     </div>
   );
 }
-
